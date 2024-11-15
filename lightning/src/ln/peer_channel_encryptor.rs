@@ -159,7 +159,7 @@ impl PeerChannelEncryptor {
 		let mut nonce = [0; 12];
 		nonce[4..].copy_from_slice(&n.to_le_bytes()[..]);
 
-		println!("[Header encryption] Encrypting message length: {:?}", plaintext);
+		// println!("[Header encryption] Encrypting message length: {:?}", plaintext);
 		let mut chacha = ChaCha20Poly1305RFC::new(key, &nonce, h);
 		let mut tag = [0; 16];
 		chacha.encrypt(plaintext, &mut res[0..plaintext.len()], &mut tag);
@@ -186,8 +186,8 @@ impl PeerChannelEncryptor {
 			let padding = vec![0; LN_CONST_MSG_LEN - res.len()];
 			res.extend(padding);
 		}
-		println!("[Payload encryption] Encrypted message with length: {}", res.len());
-		println!("[Payload encryption] Encrypted message: {:?}", res);
+		// println!("[Payload encryption] Encrypted message with length: {}", res.len());
+		// println!("[Payload encryption] Encrypted message: {:?}", res);
 	}
 
 	fn decrypt_in_place_with_ad(
@@ -197,10 +197,10 @@ impl PeerChannelEncryptor {
 		nonce[4..].copy_from_slice(&n.to_le_bytes()[..]);
 
 		let mut chacha = ChaCha20Poly1305RFC::new(key, &nonce, h);
-		println!("[Payload decryption] Length of message to decrypt: {}", inout.len());
-		println!("[Payload decryption] Message to decrypt: {:?}", inout);
+		// println!("[Payload decryption] Length of message to decrypt: {}", inout.len());
+		// println!("[Payload decryption] Message to decrypt: {:?}", inout);
 		let (inout, tag) = inout.split_at_mut(inout.len() - 16);
-		println!("[Payload decryption] Original MAC: {:?}", tag);
+		// println!("[Payload decryption] Original MAC: {:?}", tag);
 		if chacha.check_decrypt_in_place(inout, tag).is_err() {
 			println!("[Payload decryption] Bad MAC => diconnect peer\n");
 			return Err(LightningError {
@@ -551,7 +551,7 @@ impl PeerChannelEncryptor {
 	/// [`Vec::len`], to avoid reallocating for the message MAC, which will be appended to the vec.
 	fn encrypt_message_with_header_0s(&mut self, msgbuf: &mut Vec<u8>) {
 		let msg_len = msgbuf.len() - 16 - 2;
-		println!("Encrypting message buffer of length: {}", msg_len);
+		// println!("Encrypting message buffer of length: {}", msg_len);
 		if msg_len > LN_MAX_MSG_LEN {
 			panic!("Attempted to encrypt message longer than 65535 bytes!");
 		}

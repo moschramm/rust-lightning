@@ -117,9 +117,9 @@ mod real_chachapoly {
 
 			let mut calc_tag = [0u8; 16];
 			self.mac.raw_result(&mut calc_tag);
-			println!("[Header decryption] Decrypting input of length: {}", input.len());
-			println!("[Header decryption] Input to decrypt: {:?}", input);
-			println!("[Header decryption] MAC read from header: {:?}", tag);
+			// println!("[Header decryption] Decrypting input of length: {}", input.len());
+			// println!("[Header decryption] Input to decrypt: {:?}", input);
+			// println!("[Header decryption] MAC read from header: {:?}", tag);
 			if fixed_time_eq(&calc_tag, tag) {
 				self.cipher.process(input, output);
 				Ok(())
@@ -131,9 +131,9 @@ mod real_chachapoly {
 		pub fn check_decrypt_in_place(
 			&mut self, input_output: &mut [u8], tag: &[u8],
 		) -> Result<(), ()> {
-			println!("[Payload decryption] Decrypting input of length: {}", input_output.len());
+			// println!("[Payload decryption] Decrypting input of length: {}", input_output.len());
 			self.decrypt_in_place(input_output);
-			println!("[Payload decryption] Decrypted message length: {}\n", input_output.len());
+			// println!("[Payload decryption] Decrypted message length: {}\n", input_output.len());
 			if self.finish_and_check_tag(tag) {
 				Ok(())
 			} else {
