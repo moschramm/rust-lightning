@@ -1595,6 +1595,7 @@ where
 	pub fn read_event(
 		&self, peer_descriptor: &mut Descriptor, data: &[u8],
 	) -> Result<bool, PeerHandleError> {
+		// println!("Data to read: {:?}", data);
 		match self.do_read_event(peer_descriptor, data) {
 			Ok(res) => Ok(res),
 			Err(e) => {
@@ -1867,20 +1868,21 @@ where
 											peer.unpadded_msg_len
 										)
 									);
-									peer.unpadded_msg_len = 0;
 									// println!(
 									// 	"[Message] pending_read_buffer_pos after decrypting: {}",
 									// 	peer.pending_read_buffer_pos
 									// );
 
 									let mut reader = io::Cursor::new(
-										&peer.pending_read_buffer
-											[..peer.pending_read_buffer.len() - 16],
+										&peer.pending_read_buffer[..peer.unpadded_msg_len - 16],
 									);
 									let message_result = wire::read(
 										&mut reader,
 										&*self.message_handler.custom_message_handler,
 									);
+
+									// Reset unpadded message length
+									peer.unpadded_msg_len = 0;
 
 									// Reset read buffer
 									if peer.pending_read_buffer.capacity() > 8192 {
