@@ -15,7 +15,7 @@ features = ["lightning/std"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-futures = [ ]
+futures = []
 std = []
 
 default = ["std"]
@@ -26,8 +26,16 @@ lightning = { version = "0.0.125", path = "../lightning", default-features = fal
 lightning-rapid-gossip-sync = { version = "0.0.125", path = "../lightning-rapid-gossip-sync", default-features = false }
 
 [dev-dependencies]
-tokio = { version = "1.35", features = [ "macros", "rt", "rt-multi-thread", "sync", "time" ] }
-lightning = { version = "0.0.125", path = "../lightning", features = ["_test_utils"] }
+tokio = { version = "1.35", features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+lightning = { version = "0.0.125", path = "../lightning", features = [
+    "_test_utils",
+] }
 lightning-invoice = { version = "0.32.0", path = "../lightning-invoice" }
 lightning-persister = { version = "0.0.125", path = "../lightning-persister" }
 

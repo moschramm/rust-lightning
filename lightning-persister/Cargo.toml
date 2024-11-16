@@ -18,13 +18,18 @@ bitcoin = "0.32.2"
 lightning = { version = "0.0.125", path = "../lightning" }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.48.0", default-features = false, features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
+windows-sys = { version = "0.48.0", default-features = false, features = [
+    "Win32_Storage_FileSystem",
+    "Win32_Foundation",
+] }
 
 [target.'cfg(ldk_bench)'.dependencies]
 criterion = { version = "0.4", optional = true, default-features = false }
 
 [dev-dependencies]
-lightning = { version = "0.0.125", path = "../lightning", features = ["_test_utils"] }
+lightning = { version = "0.0.125", path = "../lightning", features = [
+    "_test_utils",
+] }
 bitcoin = { version = "0.32.2", default-features = false }
 
 [lints]

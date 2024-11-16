@@ -25,7 +25,9 @@ bitcoin = { version = "0.32.2", default-features = false }
 criterion = { version = "0.4", optional = true, default-features = false }
 
 [dev-dependencies]
-lightning = { version = "0.0.125", path = "../lightning", features = ["_test_utils"] }
+lightning = { version = "0.0.125", path = "../lightning", features = [
+    "_test_utils",
+] }
 
 [lints]
 workspace = true

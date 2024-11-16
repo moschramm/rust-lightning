@@ -15,11 +15,7 @@ members = [
     "possiblyrandom",
 ]
 
-exclude = [
-    "no-std-check",
-    "msrv-no-dev-deps-check",
-    "bench",
-]
+exclude = ["no-std-check", "msrv-no-dev-deps-check", "bench"]
 
 # Our tests do actual crypto and lots of work, the tradeoff for -O2 is well
 # worth it. Note that we only apply optimizations to dependencies, not workspace
