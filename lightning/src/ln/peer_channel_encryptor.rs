@@ -30,6 +30,9 @@ use crate::util::ser::VecWriter;
 
 use core::ops::Deref;
 
+use rand::prelude::*;
+use rand_chacha::ChaCha20Rng;
+
 /// Maximum Lightning message data length according to
 /// [BOLT-8](https://github.com/lightning/bolts/blob/v1.0/08-transport.md#lightning-message-specification)
 /// and [BOLT-1](https://github.com/lightning/bolts/blob/master/01-messaging.md#lightning-message-format):
@@ -108,6 +111,7 @@ pub struct PeerChannelEncryptor {
 	their_node_id: Option<PublicKey>, // filled in for outbound, or inbound after noise_state is Finished
 
 	noise_state: NoiseState,
+	random_number_generator: ChaCha20Rng,
 }
 
 impl PeerChannelEncryptor {
@@ -118,6 +122,7 @@ impl PeerChannelEncryptor {
 		sha.input(&NOISE_H);
 		sha.input(&their_node_id.serialize()[..]);
 		let h = Sha256::from_engine(sha).to_byte_array();
+		let rng = ChaCha20Rng::from_entropy();
 
 		PeerChannelEncryptor {
 			their_node_id: Some(their_node_id),
@@ -126,6 +131,7 @@ impl PeerChannelEncryptor {
 				directional_state: DirectionalNoiseState::Outbound { ie: ephemeral_key },
 				bidirectional_state: BidirectionalNoiseState { h, ck: NOISE_CK },
 			},
+			random_number_generator: rng,
 		}
 	}
 
@@ -138,6 +144,7 @@ impl PeerChannelEncryptor {
 		let our_node_id = node_signer.get_node_id(Recipient::Node).unwrap();
 		sha.input(&our_node_id.serialize()[..]);
 		let h = Sha256::from_engine(sha).to_byte_array();
+		let rng = ChaCha20Rng::from_entropy();
 
 		PeerChannelEncryptor {
 			their_node_id: None,
@@ -150,6 +157,7 @@ impl PeerChannelEncryptor {
 				},
 				bidirectional_state: BidirectionalNoiseState { h, ck: NOISE_CK },
 			},
+			random_number_generator: rng,
 		}
 	}
 
@@ -171,7 +179,7 @@ impl PeerChannelEncryptor {
 	/// Encrypts the message in res[offset..] in-place and pushes a 16-byte tag onto the end of
 	/// res.
 	fn encrypt_in_place_with_ad(
-		res: &mut Vec<u8>, offset: usize, n: u64, key: &[u8; 32], h: &[u8],
+		res: &mut Vec<u8>, offset: usize, n: u64, key: &[u8; 32], h: &[u8], rng: &mut ChaCha20Rng,
 	) {
 		let mut nonce = [0; 12];
 		nonce[4..].copy_from_slice(&n.to_le_bytes()[..]);
@@ -183,7 +191,8 @@ impl PeerChannelEncryptor {
 
 		// add padding if neccessary
 		if res.len() < LN_CONST_MSG_LEN {
-			let padding = vec![0; LN_CONST_MSG_LEN - res.len()];
+			let mut padding = vec![0; LN_CONST_MSG_LEN - res.len()];
+			rng.fill_bytes(&mut padding);
 			res.extend(padding);
 		}
 		// println!("[Payload encryption] Encrypted message with length: {}", res.len());
@@ -574,7 +583,14 @@ impl PeerChannelEncryptor {
 				);
 				*sn += 1;
 
-				Self::encrypt_in_place_with_ad(msgbuf, 16 + 2, *sn, sk, &[0; 0]);
+				Self::encrypt_in_place_with_ad(
+					msgbuf,
+					16 + 2,
+					*sn,
+					sk,
+					&[0; 0],
+					&mut self.random_number_generator,
+				);
 				*sn += 1;
 			},
 			_ => panic!("Tried to encrypt a message prior to noise handshake completion"),
