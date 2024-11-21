@@ -14,3 +14,4 @@ lightning-custom-message/target
 lightning-transaction-sync/target
 no-std-check/target
 msrv-no-dev-deps-check/target
+/.direnv/
