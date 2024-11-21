@@ -619,6 +619,51 @@ impl PeerChannelEncryptor {
 		res.0
 	}
 
+	/// Builds sendable bytes for a padding message.
+	///
+	/// `msgbuf` must begin with 16 + 2 dummy/0 bytes, which will be filled with the encrypted
+	/// message length and its MAC. It should then be followed by the message bytes themselves
+	/// (including the two byte message type).
+	///
+	/// For effeciency, the [`Vec::capacity`] should be at least 16 bytes larger than the
+	/// [`Vec::len`], to avoid reallocating for the message MAC, which will be appended to the vec.
+	fn encrypt_padding_message_with_header_0s(&mut self, msgbuf: &mut Vec<u8>) {
+		match self.noise_state {
+			NoiseState::Finished { ref mut sk, ref mut sn, ref mut sck, rk: _, rn: _, rck: _ } => {
+				if *sn >= 1000 {
+					let (new_sck, new_sk) = hkdf_extract_expand_twice(sck, sk);
+					*sck = new_sck;
+					*sk = new_sk;
+					*sn = 0;
+				}
+
+				Self::encrypt_with_ad(
+					&mut msgbuf[0..16 + 2],
+					*sn,
+					sk,
+					&[0; 0],
+					&(LN_CONST_MSG_LEN as u16 - (16 + 2 - 16)).to_be_bytes(),
+				);
+				*sn += 1;
+
+				// TODO: fill payload with random data
+			},
+			_ => panic!("Tried to encrypt a message prior to noise handshake completion"),
+		}
+	}
+
+	/// Encrypts the given message, returning the encrypted version.
+	/// Doesn't encrypt payload but inserts random data
+	pub fn encrypt_padding_message(&mut self) -> Vec<u8> {
+		// Allocate a buffer with 2KB, fitting most common messages. Reserve the first 16+2 bytes
+		// for the 2-byte message type prefix and its MAC.
+
+		let mut res = vec![0; LN_CONST_MSG_LEN];
+
+		self.encrypt_padding_message_with_header_0s(&mut res);
+		res
+	}
+
 	/// Decrypts a message length header from the remote peer.
 	/// panics if noise handshake has not yet finished or msg.len() != 18
 	pub fn decrypt_length_header(&mut self, msg: &[u8]) -> Result<u16, LightningError> {
@@ -1097,6 +1142,13 @@ mod tests {
 			inbound_peer.decrypt_message(&mut res[2 + 16..], msg.len()).unwrap();
 			assert_eq!(res[2 + 16..msg.len() + 16 + 2], msg[..]);
 		}
+
+		let mut res = outbound_peer.encrypt_padding_message();
+		assert_eq!(res.len(), LN_CONST_MSG_LEN);
+		// println!("Encrypted padding message: {:?}", res);
+		// inbound_peer.decrypt_message(&mut res[2 + 16..], 1452).unwrap();
+		// let padding_msg: [u8; 1452] = [0; 1452];
+		// assert_eq!(res[2 + 16..res.len() - 16], padding_msg);
 	}
 
 	#[test]

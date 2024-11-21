@@ -1631,6 +1631,20 @@ where
 		peer.pending_outbound_buffer.push_back(peer.channel_encryptor.encrypt_message(message));
 	}
 
+	/// Append a padding message to a peer's pending outbound/write buffer
+	fn enqueue_padding_message(&self, peer: &mut Peer) {
+		let message: [u8; 1452] = [0; 1452];
+		let logger = WithContext::from(&self.logger, peer.their_node_id.map(|p| p.0), None, None);
+		log_trace!(
+			logger,
+			"Enqueueing message {:?} to {}",
+			message,
+			log_pubkey!(peer.their_node_id.unwrap().0)
+		);
+		peer.msgs_sent_since_pong += 1;
+		peer.pending_outbound_buffer.push_back(peer.channel_encryptor.encrypt_padding_message());
+	}
+
 	/// Append a message to a peer's pending outbound/write gossip broadcast buffer
 	fn enqueue_encoded_gossip_broadcast(&self, peer: &mut Peer, encoded_message: MessageBuf) {
 		peer.msgs_sent_since_pong += 1;
