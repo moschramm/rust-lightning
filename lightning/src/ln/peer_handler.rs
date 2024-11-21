@@ -1832,7 +1832,7 @@ where
 											.decrypt_length_header(&peer.pending_read_buffer[..])
 									);
 									// set unpadded_msg_len to msg_len read from header
-									peer.unpadded_msg_len = (msg_len + 16) as usize;
+									peer.unpadded_msg_len = msg_len as usize;
 									// println!(
 									// 	"[Header] Message length read from header: {}",
 									// 	msg_len
@@ -1874,7 +1874,7 @@ where
 									// );
 
 									let mut reader = io::Cursor::new(
-										&peer.pending_read_buffer[..peer.unpadded_msg_len - 16],
+										&peer.pending_read_buffer[..peer.unpadded_msg_len],
 									);
 									let message_result = wire::read(
 										&mut reader,

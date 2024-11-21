@@ -189,7 +189,7 @@ impl PeerChannelEncryptor {
 		chacha.encrypt_full_message_in_place(&mut res[offset..], &mut tag);
 		res.extend_from_slice(&tag);
 
-		// add padding if neccessary
+		// add padding after MAC tag if neccessary
 		if res.len() < LN_CONST_MSG_LEN {
 			let mut padding = vec![0; LN_CONST_MSG_LEN - res.len()];
 			rng.fill_bytes(&mut padding);
@@ -612,6 +612,7 @@ impl PeerChannelEncryptor {
 		// for the 2-byte message type prefix and its MAC.
 		let mut res = VecWriter(Vec::with_capacity(MSG_BUF_ALLOC_SIZE));
 		res.0.resize(16 + 2, 0);
+		// res.0 after resize: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 		wire::write(message, &mut res).expect("In-memory messages must never fail to serialize");
 
 		self.encrypt_message_with_header_0s(&mut res.0);
@@ -654,7 +655,7 @@ impl PeerChannelEncryptor {
 
 		match self.noise_state {
 			NoiseState::Finished { sk: _, sn: _, sck: _, ref rk, ref mut rn, rck: _ } => {
-				Self::decrypt_in_place_with_ad(&mut msg[..msg_len], *rn, rk, &[0; 0])?;
+				Self::decrypt_in_place_with_ad(&mut msg[..msg_len + 16], *rn, rk, &[0; 0])?;
 				*rn += 1;
 				Ok(())
 			},
@@ -710,7 +711,7 @@ mod tests {
 	use bitcoin::secp256k1::Secp256k1;
 	use bitcoin::secp256k1::{PublicKey, SecretKey};
 
-	use crate::ln::peer_channel_encryptor::{NoiseState, PeerChannelEncryptor};
+	use crate::ln::peer_channel_encryptor::{NoiseState, PeerChannelEncryptor, LN_CONST_MSG_LEN};
 	use crate::util::test_utils::TestNodeSigner;
 
 	fn get_outbound_peer_for_initiator_test_vectors() -> PeerChannelEncryptor {
@@ -1068,8 +1069,10 @@ mod tests {
 
 		for i in 0..1005 {
 			let msg = [0x68, 0x65, 0x6c, 0x6c, 0x6f];
+			// MessageBuf([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 104, 101, 108, 108, 111])
 			let mut res = outbound_peer.encrypt_buffer(MessageBuf::from_encoded(&msg));
-			assert_eq!(res.len(), 5 + 2 * 16 + 2);
+			// assert_eq!(res.len(), 5 + 2 * 16 + 2);
+			assert_eq!(res.len(), LN_CONST_MSG_LEN);
 
 			let len_header = res[0..2 + 16].to_vec();
 			assert_eq!(
@@ -1078,21 +1081,21 @@ mod tests {
 			);
 
 			if i == 0 {
-				assert_eq!(res, <Vec<u8>>::from_hex("cf2b30ddf0cf3f80e7c35a6e6730b59fe802473180f396d88a8fb0db8cbcf25d2f214cf9ea1d95").unwrap());
+				assert_eq!(res[..39], <Vec<u8>>::from_hex("cf2b30ddf0cf3f80e7c35a6e6730b59fe802473180f396d88a8fb0db8cbcf25d2f214cf9ea1d95").unwrap());
 			} else if i == 1 {
-				assert_eq!(res, <Vec<u8>>::from_hex("72887022101f0b6753e0c7de21657d35a4cb2a1f5cde2650528bbc8f837d0f0d7ad833b1a256a1").unwrap());
+				assert_eq!(res[..39], <Vec<u8>>::from_hex("72887022101f0b6753e0c7de21657d35a4cb2a1f5cde2650528bbc8f837d0f0d7ad833b1a256a1").unwrap());
 			} else if i == 500 {
-				assert_eq!(res, <Vec<u8>>::from_hex("178cb9d7387190fa34db9c2d50027d21793c9bc2d40b1e14dcf30ebeeeb220f48364f7a4c68bf8").unwrap());
+				assert_eq!(res[..39], <Vec<u8>>::from_hex("178cb9d7387190fa34db9c2d50027d21793c9bc2d40b1e14dcf30ebeeeb220f48364f7a4c68bf8").unwrap());
 			} else if i == 501 {
-				assert_eq!(res, <Vec<u8>>::from_hex("1b186c57d44eb6de4c057c49940d79bb838a145cb528d6e8fd26dbe50a60ca2c104b56b60e45bd").unwrap());
+				assert_eq!(res[..39], <Vec<u8>>::from_hex("1b186c57d44eb6de4c057c49940d79bb838a145cb528d6e8fd26dbe50a60ca2c104b56b60e45bd").unwrap());
 			} else if i == 1000 {
-				assert_eq!(res, <Vec<u8>>::from_hex("4a2f3cc3b5e78ddb83dcb426d9863d9d9a723b0337c89dd0b005d89f8d3c05c52b76b29b740f09").unwrap());
+				assert_eq!(res[..39], <Vec<u8>>::from_hex("4a2f3cc3b5e78ddb83dcb426d9863d9d9a723b0337c89dd0b005d89f8d3c05c52b76b29b740f09").unwrap());
 			} else if i == 1001 {
-				assert_eq!(res, <Vec<u8>>::from_hex("2ecd8c8a5629d0d02ab457a0fdd0f7b90a192cd46be5ecb6ca570bfc5e268338b1a16cf4ef2d36").unwrap());
+				assert_eq!(res[..39], <Vec<u8>>::from_hex("2ecd8c8a5629d0d02ab457a0fdd0f7b90a192cd46be5ecb6ca570bfc5e268338b1a16cf4ef2d36").unwrap());
 			}
 
-			inbound_peer.decrypt_message(&mut res[2 + 16..]).unwrap();
-			assert_eq!(res[2 + 16..res.len() - 16], msg[..]);
+			inbound_peer.decrypt_message(&mut res[2 + 16..], msg.len()).unwrap();
+			assert_eq!(res[2 + 16..msg.len() + 16 + 2], msg[..]);
 		}
 	}
 
@@ -1117,6 +1120,6 @@ mod tests {
 
 		// MSG should not exceed LN_MAX_MSG_LEN + 16
 		let mut msg = [4u8; LN_MAX_MSG_LEN + 17];
-		inbound_peer.decrypt_message(&mut msg).unwrap();
+		inbound_peer.decrypt_message(&mut msg, LN_MAX_MSG_LEN + 17).unwrap();
 	}
 }
