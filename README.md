@@ -14,6 +14,16 @@ and networking can be provided by LDK's [sample modules](#crates), or you may pr
 own custom implementations.
 More information is available in the [`About`](#about) section.
 
+Custom changes
+--------------
+1. [Constant message length](./lightning/src/ln/peer_channel_encryptor.rs#L193-L197)
+  Adds padding to each payment related message if its length is below a specified threshold `LN_CONST_MSG_LEN`.
+  The padding consists of random data and is added after the MAC tag of the message payload.
+2. [Padding message](lightning/src/ln/msgs.rs#L858-L861)
+  Introduces a new message type `PaddingMessage` (type ID: 32769) used solely for generating cover
+  traffic to defend against traffic analysis. Channel manager exposes a function to trigger sending
+  a padding message [`send_padding_message()`](lightning/src/ln/channelmanager.rs#8539-L8542).
+
 Status
 ------
 The project implements all of the [BOLT specifications](https://github.com/lightning/bolts),
