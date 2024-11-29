@@ -16,7 +16,7 @@ More information is available in the [`About`](#about) section.
 
 Custom changes
 --------------
-1. [Constant message length](./lightning/src/ln/peer_channel_encryptor.rs:#L193-L197)
+1. [Constant message length](./lightning/src/ln/peer_channel_encryptor.rs#L193-L197)
   Adds padding to each payment related message if its length is below a specified threshold `LN_CONST_MSG_LEN`.
   The padding consists of random data and is added after the MAC tag of the message payload.
 
