@@ -70,7 +70,7 @@ use crate::ln::features::{
 	Bolt12InvoiceFeatures, ChannelFeatures, ChannelTypeFeatures, InitFeatures, NodeFeatures,
 };
 use crate::ln::inbound_payment;
-use crate::ln::msgs;
+use crate::ln::msgs::{self, PaddingMessage, LN_CONST_PADDING_LEN};
 use crate::ln::msgs::{ChannelMessageHandler, DecodeError, LightningError};
 use crate::ln::onion_payment::{
 	check_incoming_htlc_cltv, create_fwd_pending_htlc_info, create_recv_pending_htlc_info,
@@ -8535,6 +8535,36 @@ where
 		);
 	}
 
+	/// Sends padding message to peer specified by node id.
+	pub fn send_padding_message(&self, counterparty_node_id: &PublicKey) {
+		// TODO: handle return value, potential error
+		let _ = self.send_padding_message_internal(counterparty_node_id);
+	}
+
+	fn send_padding_message_internal(
+		&self, counterparty_node_id: &PublicKey,
+	) -> Result<(), MsgHandleErrInternal> {
+		// Note that the ChannelManager is NOT re-persisted on disk after this
+		let per_peer_state = self.per_peer_state.read().unwrap();
+		let peer_state_mutex = per_peer_state.get(counterparty_node_id).ok_or_else(|| {
+			debug_assert!(false);
+			MsgHandleErrInternal::send_err_msg_no_close(
+				format!(
+					"Can't find a peer matching the passed counterparty node_id {}",
+					counterparty_node_id
+				),
+				ChannelId::new_zero(), // place holder channel id
+			)
+		})?;
+		let mut peer_state_lock = peer_state_mutex.lock().unwrap();
+		let peer_state = &mut *peer_state_lock;
+		peer_state.pending_msg_events.push(events::MessageSendEvent::SendPaddingMessage {
+			node_id: *counterparty_node_id,
+			msg: PaddingMessage { padding: [0; LN_CONST_PADDING_LEN] },
+		});
+		Ok(())
+	}
+
 	/// Accepts a request to open a channel after a [`Event::OpenChannelRequest`].
 	///
 	/// The `temporary_channel_id` parameter indicates which inbound channel should be accepted,
@@ -12620,6 +12650,10 @@ where
 		});
 	}
 
+	fn handle_padding_msg(&self, _counterparty_node_id: &PublicKey, _msg: &msgs::PaddingMessage) {
+		// Don't do anything
+	}
+
 	fn peer_disconnected(&self, counterparty_node_id: &PublicKey) {
 		let _persistence_guard = PersistenceNotifierGuard::optionally_notify(self, || {
 			NotifyOption::SkipPersistHandleEvents
@@ -12724,6 +12758,8 @@ where
 						&events::MessageSendEvent::SendShortIdsQuery { .. } => false,
 						&events::MessageSendEvent::SendReplyChannelRange { .. } => false,
 						&events::MessageSendEvent::SendGossipTimestampFilter { .. } => false,
+						// Padding Message
+						&events::MessageSendEvent::SendPaddingMessage { .. } => false,
 					}
 				});
 				debug_assert!(peer_state.is_connected, "A disconnected peer cannot disconnect");

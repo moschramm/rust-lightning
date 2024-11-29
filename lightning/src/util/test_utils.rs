@@ -1114,6 +1114,10 @@ impl msgs::ChannelMessageHandler for TestChannelMessageHandler {
 	fn handle_tx_abort(&self, _their_node_id: &PublicKey, msg: &msgs::TxAbort) {
 		self.received_msg(wire::Message::TxAbort(msg.clone()));
 	}
+
+	fn handle_padding_msg(&self, _their_node_id: &PublicKey, msg: &msgs::PaddingMessage) {
+		self.received_msg(wire::Message::PaddingMessage(msg.clone()));
+	}
 }
 
 impl events::MessageSendEventsProvider for TestChannelMessageHandler {

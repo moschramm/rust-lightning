@@ -1052,6 +1052,7 @@ pub fn remove_first_msg_event_to_node(
 		MessageSendEvent::SendTxInitRbf { node_id, .. } => node_id == msg_node_id,
 		MessageSendEvent::SendTxAckRbf { node_id, .. } => node_id == msg_node_id,
 		MessageSendEvent::SendTxAbort { node_id, .. } => node_id == msg_node_id,
+		MessageSendEvent::SendPaddingMessage { node_id, .. } => node_id == msg_node_id,
 	});
 	if ev_index.is_some() {
 		msg_events.remove(ev_index.unwrap())

@@ -69,8 +69,8 @@ use bitcoin::hashes::sha256::Hash as Sha256;
 use bitcoin::hashes::sha256::HashEngine as Sha256Engine;
 use bitcoin::hashes::{Hash, HashEngine};
 
-// constant message size used for padding
-const LN_CONST_MSG_LEN: usize = 1486;
+/// constant message size used for padding
+pub const LN_CONST_MSG_LEN: usize = 1486;
 
 /// A handler provided to [`PeerManager`] for reading and handling custom messages.
 ///
@@ -429,6 +429,8 @@ impl ChannelMessageHandler for ErroringMessageHandler {
 	}
 	// msgs::ChannelUpdate does not contain the channel_id field, so we just drop them.
 	fn handle_channel_update(&self, _their_node_id: &PublicKey, _msg: &msgs::ChannelUpdate) {}
+	// msgs::PaddingMessage does not contain the channel_id field, so we just drop them.
+	fn handle_padding_msg(&self, _their_node_id: &PublicKey, _msg: &msgs::PaddingMessage) {}
 	fn peer_disconnected(&self, _their_node_id: &PublicKey) {}
 	fn peer_connected(
 		&self, _their_node_id: &PublicKey, _init: &msgs::Init, _inbound: bool,
@@ -1595,7 +1597,6 @@ where
 	pub fn read_event(
 		&self, peer_descriptor: &mut Descriptor, data: &[u8],
 	) -> Result<bool, PeerHandleError> {
-		// println!("Data to read: {:?}", data);
 		match self.do_read_event(peer_descriptor, data) {
 			Ok(res) => Ok(res),
 			Err(e) => {
@@ -1629,20 +1630,6 @@ where
 		}
 		peer.msgs_sent_since_pong += 1;
 		peer.pending_outbound_buffer.push_back(peer.channel_encryptor.encrypt_message(message));
-	}
-
-	/// Append a padding message to a peer's pending outbound/write buffer
-	fn enqueue_padding_message(&self, peer: &mut Peer) {
-		let message: [u8; 1452] = [0; 1452];
-		let logger = WithContext::from(&self.logger, peer.their_node_id.map(|p| p.0), None, None);
-		log_trace!(
-			logger,
-			"Enqueueing message {:?} to {}",
-			message,
-			log_pubkey!(peer.their_node_id.unwrap().0)
-		);
-		peer.msgs_sent_since_pong += 1;
-		peer.pending_outbound_buffer.push_back(peer.channel_encryptor.encrypt_padding_message());
 	}
 
 	/// Append a message to a peer's pending outbound/write gossip broadcast buffer
@@ -1832,14 +1819,6 @@ where
 							},
 							NextNoiseStep::NoiseComplete => {
 								if peer.pending_read_is_header {
-									// println!(
-									// 	"[Header] Length of pending_read_buffer before decrypting: {}",
-									// 	peer.pending_read_buffer.len()
-									// );
-									// println!(
-									// 	"[Header] pending_read_buffer before decrypting: {:?}",
-									// 	peer.pending_read_buffer
-									// );
 									let msg_len = try_potential_handleerror!(
 										peer,
 										peer.channel_encryptor
@@ -1847,10 +1826,6 @@ where
 									);
 									// set unpadded_msg_len to msg_len read from header
 									peer.unpadded_msg_len = msg_len as usize;
-									// println!(
-									// 	"[Header] Message length read from header: {}",
-									// 	msg_len
-									// );
 									if peer.pending_read_buffer.capacity() > 8192 {
 										peer.pending_read_buffer = Vec::new();
 									}
@@ -1862,18 +1837,6 @@ where
 									}
 									peer.pending_read_is_header = false;
 								} else {
-									// println!(
-									// 	"[Message] Length of pending_read_buffer before decrypting: {}",
-									// 	peer.pending_read_buffer.len()
-									// );
-									// println!(
-									// 	"[Message] pending_read_buffer before decrypting: {:?}",
-									// 	peer.pending_read_buffer
-									// );
-									// println!(
-									// 	"[Message] pending_read_buffer_pos before decrypting: {}",
-									// 	peer.pending_read_buffer_pos
-									// );
 									debug_assert!(peer.pending_read_buffer.len() >= 2 + 16);
 									try_potential_handleerror!(
 										peer,
@@ -1882,10 +1845,6 @@ where
 											peer.unpadded_msg_len
 										)
 									);
-									// println!(
-									// 	"[Message] pending_read_buffer_pos after decrypting: {}",
-									// 	peer.pending_read_buffer_pos
-									// );
 
 									let mut reader = io::Cursor::new(
 										&peer.pending_read_buffer[..peer.unpadded_msg_len],
@@ -2430,6 +2389,11 @@ where
 				self.message_handler
 					.onion_message_handler
 					.handle_onion_message(&their_node_id, &msg);
+			},
+
+			// Padding message:
+			wire::Message::PaddingMessage(msg) => {
+				log_trace!(logger, "Received padding message of type {}, ignoring", msg.type_id());
 			},
 
 			// Unknown messages:
@@ -3052,6 +3016,14 @@ where
 						MessageSendEvent::SendGossipTimestampFilter { ref node_id, ref msg } => {
 							self.enqueue_message(&mut *get_peer_for_forwarding!(node_id), msg);
 						},
+						MessageSendEvent::SendPaddingMessage { ref node_id, ref msg } => {
+							log_debug!(
+								WithContext::from(&self.logger, Some(*node_id), None, None),
+								"Handling SendPaddingMessage event in peer_handler for node {}",
+								log_pubkey!(node_id)
+							);
+							self.enqueue_message(&mut *get_peer_for_forwarding!(node_id), msg);
+						},
 					}
 				}
 
@@ -3411,6 +3383,7 @@ mod tests {
 	use crate::events;
 	use crate::io;
 	use crate::ln::features::{InitFeatures, NodeFeatures};
+	use crate::ln::msgs::LN_CONST_PADDING_LEN;
 	use crate::ln::msgs::{Init, LightningError, SocketAddress};
 	use crate::ln::peer_channel_encryptor::PeerChannelEncryptor;
 	use crate::ln::peer_handler::{
@@ -3906,6 +3879,38 @@ mod tests {
 		peers[0].message_handler.chan_handler = &a_chan_handler;
 
 		b_chan_handler.expect_receive_msg(wire::Message::Shutdown(msg));
+		peers[1].message_handler.chan_handler = &b_chan_handler;
+
+		peers[0].process_events();
+
+		let a_data = fd_a.outbound_data.lock().unwrap().split_off(0);
+		assert_eq!(peers[1].read_event(&mut fd_b, &a_data).unwrap(), false);
+	}
+
+	#[test]
+	fn test_send_padding_msg() {
+		// Simple test which builds a network of PeerManager, connects and brings them to NoiseState::Finished and
+		// push a padding message from one peer to another.
+		let cfgs = create_peermgr_cfgs(2);
+		let a_chan_handler = test_utils::TestChannelMessageHandler::new(
+			ChainHash::using_genesis_block(Network::Testnet),
+		);
+		let b_chan_handler = test_utils::TestChannelMessageHandler::new(
+			ChainHash::using_genesis_block(Network::Testnet),
+		);
+		let mut peers = create_network(2, &cfgs);
+		let (fd_a, mut fd_b) = establish_connection(&peers[0], &peers[1]);
+		assert_eq!(peers[0].peers.read().unwrap().len(), 1);
+
+		let their_id = peers[1].node_signer.get_node_id(Recipient::Node).unwrap();
+
+		let msg = msgs::PaddingMessage { padding: [0; LN_CONST_PADDING_LEN] };
+		a_chan_handler.pending_events.lock().unwrap().push(
+			events::MessageSendEvent::SendPaddingMessage { node_id: their_id, msg: msg.clone() },
+		);
+		peers[0].message_handler.chan_handler = &a_chan_handler;
+
+		b_chan_handler.expect_receive_msg(wire::Message::PaddingMessage(msg));
 		peers[1].message_handler.chan_handler = &b_chan_handler;
 
 		peers[0].process_events();

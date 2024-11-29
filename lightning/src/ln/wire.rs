@@ -100,6 +100,7 @@ where
 	QueryChannelRange(msgs::QueryChannelRange),
 	ReplyChannelRange(msgs::ReplyChannelRange),
 	GossipTimestampFilter(msgs::GossipTimestampFilter),
+	PaddingMessage(msgs::PaddingMessage),
 	/// A message that could not be decoded because its type is unknown.
 	Unknown(u16),
 	/// A message that was produced by a [`CustomMessageReader`] and is to be handled by a
@@ -161,6 +162,7 @@ where
 			&Message::QueryChannelRange(ref msg) => msg.write(writer),
 			&Message::ReplyChannelRange(ref msg) => msg.write(writer),
 			&Message::GossipTimestampFilter(ref msg) => msg.write(writer),
+			&Message::PaddingMessage(ref msg) => msg.write(writer),
 			&Message::Unknown(_) => Ok(()),
 			&Message::Custom(ref msg) => msg.write(writer),
 		}
@@ -222,6 +224,7 @@ where
 			&Message::QueryChannelRange(ref msg) => msg.type_id(),
 			&Message::ReplyChannelRange(ref msg) => msg.type_id(),
 			&Message::GossipTimestampFilter(ref msg) => msg.type_id(),
+			&Message::PaddingMessage(ref msg) => msg.type_id(),
 			&Message::Unknown(type_id) => type_id,
 			&Message::Custom(ref msg) => msg.type_id(),
 		}
@@ -323,6 +326,7 @@ where
 		msgs::GossipTimestampFilter::TYPE => {
 			Ok(Message::GossipTimestampFilter(Readable::read(buffer)?))
 		},
+		msgs::PaddingMessage::TYPE => Ok(Message::PaddingMessage(Readable::read(buffer)?)),
 		_ => {
 			if let Some(custom) = custom_reader.read(message_type, buffer)? {
 				Ok(Message::Custom(custom))
@@ -576,6 +580,10 @@ impl Encode for msgs::ReplyChannelRange {
 
 impl Encode for msgs::GossipTimestampFilter {
 	const TYPE: u16 = 265;
+}
+
+impl Encode for msgs::PaddingMessage {
+	const TYPE: u16 = 32769;
 }
 
 #[cfg(test)]

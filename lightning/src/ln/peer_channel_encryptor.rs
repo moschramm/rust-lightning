@@ -33,11 +33,12 @@ use core::ops::Deref;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 
+use crate::ln::peer_handler::LN_CONST_MSG_LEN;
+
 /// Maximum Lightning message data length according to
 /// [BOLT-8](https://github.com/lightning/bolts/blob/v1.0/08-transport.md#lightning-message-specification)
 /// and [BOLT-1](https://github.com/lightning/bolts/blob/master/01-messaging.md#lightning-message-format):
 pub const LN_MAX_MSG_LEN: usize = ::core::u16::MAX as usize; // Must be equal to 65535
-pub const LN_CONST_MSG_LEN: usize = 1486;
 
 /// The (rough) size buffer to pre-allocate when encoding a message. Messages should reliably be
 /// smaller than this size by at least 32 bytes or so.
@@ -167,7 +168,6 @@ impl PeerChannelEncryptor {
 		let mut nonce = [0; 12];
 		nonce[4..].copy_from_slice(&n.to_le_bytes()[..]);
 
-		// println!("[Header encryption] Encrypting message length: {:?}", plaintext);
 		let mut chacha = ChaCha20Poly1305RFC::new(key, &nonce, h);
 		let mut tag = [0; 16];
 		chacha.encrypt(plaintext, &mut res[0..plaintext.len()], &mut tag);
@@ -195,8 +195,6 @@ impl PeerChannelEncryptor {
 			rng.fill_bytes(&mut padding);
 			res.extend(padding);
 		}
-		// println!("[Payload encryption] Encrypted message with length: {}", res.len());
-		// println!("[Payload encryption] Encrypted message: {:?}", res);
 	}
 
 	fn decrypt_in_place_with_ad(
@@ -206,12 +204,8 @@ impl PeerChannelEncryptor {
 		nonce[4..].copy_from_slice(&n.to_le_bytes()[..]);
 
 		let mut chacha = ChaCha20Poly1305RFC::new(key, &nonce, h);
-		// println!("[Payload decryption] Length of message to decrypt: {}", inout.len());
-		// println!("[Payload decryption] Message to decrypt: {:?}", inout);
 		let (inout, tag) = inout.split_at_mut(inout.len() - 16);
-		// println!("[Payload decryption] Original MAC: {:?}", tag);
 		if chacha.check_decrypt_in_place(inout, tag).is_err() {
-			println!("[Payload decryption] Bad MAC => diconnect peer\n");
 			return Err(LightningError {
 				err: "Bad MAC".to_owned(),
 				action: msgs::ErrorAction::DisconnectPeer { msg: None },
@@ -236,7 +230,6 @@ impl PeerChannelEncryptor {
 			)
 			.is_err()
 		{
-			println!("[Header decryption] Bad MAC => diconnect peer\n");
 			return Err(LightningError {
 				err: "Bad MAC".to_owned(),
 				action: msgs::ErrorAction::DisconnectPeer { msg: None },
@@ -560,7 +553,6 @@ impl PeerChannelEncryptor {
 	/// [`Vec::len`], to avoid reallocating for the message MAC, which will be appended to the vec.
 	fn encrypt_message_with_header_0s(&mut self, msgbuf: &mut Vec<u8>) {
 		let msg_len = msgbuf.len() - 16 - 2;
-		// println!("Encrypting message buffer of length: {}", msg_len);
 		if msg_len > LN_MAX_MSG_LEN {
 			panic!("Attempted to encrypt message longer than 65535 bytes!");
 		}
@@ -617,51 +609,6 @@ impl PeerChannelEncryptor {
 
 		self.encrypt_message_with_header_0s(&mut res.0);
 		res.0
-	}
-
-	/// Builds sendable bytes for a padding message.
-	///
-	/// `msgbuf` must begin with 16 + 2 dummy/0 bytes, which will be filled with the encrypted
-	/// message length and its MAC. It should then be followed by the message bytes themselves
-	/// (including the two byte message type).
-	///
-	/// For effeciency, the [`Vec::capacity`] should be at least 16 bytes larger than the
-	/// [`Vec::len`], to avoid reallocating for the message MAC, which will be appended to the vec.
-	fn encrypt_padding_message_with_header_0s(&mut self, msgbuf: &mut Vec<u8>) {
-		match self.noise_state {
-			NoiseState::Finished { ref mut sk, ref mut sn, ref mut sck, rk: _, rn: _, rck: _ } => {
-				if *sn >= 1000 {
-					let (new_sck, new_sk) = hkdf_extract_expand_twice(sck, sk);
-					*sck = new_sck;
-					*sk = new_sk;
-					*sn = 0;
-				}
-
-				Self::encrypt_with_ad(
-					&mut msgbuf[0..16 + 2],
-					*sn,
-					sk,
-					&[0; 0],
-					&(LN_CONST_MSG_LEN as u16 - (16 + 2 - 16)).to_be_bytes(),
-				);
-				*sn += 1;
-
-				// TODO: fill payload with random data
-			},
-			_ => panic!("Tried to encrypt a message prior to noise handshake completion"),
-		}
-	}
-
-	/// Encrypts the given message, returning the encrypted version.
-	/// Doesn't encrypt payload but inserts random data
-	pub fn encrypt_padding_message(&mut self) -> Vec<u8> {
-		// Allocate a buffer with 2KB, fitting most common messages. Reserve the first 16+2 bytes
-		// for the 2-byte message type prefix and its MAC.
-
-		let mut res = vec![0; LN_CONST_MSG_LEN];
-
-		self.encrypt_padding_message_with_header_0s(&mut res);
-		res
 	}
 
 	/// Decrypts a message length header from the remote peer.
@@ -756,7 +703,8 @@ mod tests {
 	use bitcoin::secp256k1::Secp256k1;
 	use bitcoin::secp256k1::{PublicKey, SecretKey};
 
-	use crate::ln::peer_channel_encryptor::{NoiseState, PeerChannelEncryptor, LN_CONST_MSG_LEN};
+	use crate::ln::peer_channel_encryptor::{NoiseState, PeerChannelEncryptor};
+	use crate::ln::peer_handler::LN_CONST_MSG_LEN;
 	use crate::util::test_utils::TestNodeSigner;
 
 	fn get_outbound_peer_for_initiator_test_vectors() -> PeerChannelEncryptor {
@@ -1116,7 +1064,6 @@ mod tests {
 			let msg = [0x68, 0x65, 0x6c, 0x6c, 0x6f];
 			// MessageBuf([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 104, 101, 108, 108, 111])
 			let mut res = outbound_peer.encrypt_buffer(MessageBuf::from_encoded(&msg));
-			// assert_eq!(res.len(), 5 + 2 * 16 + 2);
 			assert_eq!(res.len(), LN_CONST_MSG_LEN);
 
 			let len_header = res[0..2 + 16].to_vec();
@@ -1142,13 +1089,6 @@ mod tests {
 			inbound_peer.decrypt_message(&mut res[2 + 16..], msg.len()).unwrap();
 			assert_eq!(res[2 + 16..msg.len() + 16 + 2], msg[..]);
 		}
-
-		let mut res = outbound_peer.encrypt_padding_message();
-		assert_eq!(res.len(), LN_CONST_MSG_LEN);
-		// println!("Encrypted padding message: {:?}", res);
-		// inbound_peer.decrypt_message(&mut res[2 + 16..], 1452).unwrap();
-		// let padding_msg: [u8; 1452] = [0; 1452];
-		// assert_eq!(res[2 + 16..res.len() - 16], padding_msg);
 	}
 
 	#[test]

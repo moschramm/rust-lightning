@@ -2646,6 +2646,13 @@ pub enum MessageSendEvent {
 		/// The gossip_timestamp_filter which should be sent.
 		msg: msgs::GossipTimestampFilter,
 	},
+	/// Used to indicate that a padding message should be sent to the peer with the given node_id.
+	SendPaddingMessage {
+		/// The node_id of the node which should receive this message
+		node_id: PublicKey,
+		/// The message which should be sent.
+		msg: msgs::PaddingMessage,
+	},
 }
 
 /// A trait indicating an object may generate message send events

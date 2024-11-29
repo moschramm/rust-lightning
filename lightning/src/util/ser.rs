@@ -24,9 +24,9 @@ use core::ops::Deref;
 use alloc::collections::BTreeMap;
 
 use crate::chain::ClaimId;
-use crate::ln::msgs::DecodeError;
 #[cfg(taproot)]
 use crate::ln::msgs::PartialSignatureWithNonce;
+use crate::ln::msgs::{DecodeError, LN_CONST_PADDING_LEN};
 use crate::ln::types::{PaymentHash, PaymentPreimage, PaymentSecret};
 use bitcoin::amount::Amount;
 use bitcoin::consensus::Encodable;
@@ -689,6 +689,7 @@ impl_array!(PUBLIC_KEY_SIZE, u8); // for PublicKey
 impl_array!(64, u8); // for ecdsa::Signature and schnorr::Signature
 impl_array!(66, u8); // for MuSig2 nonces
 impl_array!(1300, u8); // for OnionPacket.hop_data
+impl_array!(LN_CONST_PADDING_LEN, u8); // for PaddingMessage.padding
 
 impl_array!(8, u16);
 impl_array!(32, u16);
