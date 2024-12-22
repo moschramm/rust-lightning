@@ -1926,6 +1926,12 @@ where
 										},
 									};
 
+									// TODO: implement way to signal when padding or non-padding message was received, i.e.:
+									// if message.type_id() == 32769 {
+									// 	// signal padding message received
+									// } else {
+									// 	// signal non-padding message received
+									// }
 									msg_to_handle = Some(message);
 								}
 							},

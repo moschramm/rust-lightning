@@ -8536,9 +8536,22 @@ where
 	}
 
 	/// Sends padding message to peer specified by node id.
-	pub fn send_padding_message(&self, counterparty_node_id: &PublicKey) {
-		// TODO: handle return value, potential error
-		let _ = self.send_padding_message_internal(counterparty_node_id);
+	pub fn send_padding_message(&self, counterparty_node_id: &PublicKey) -> std::io::Result<()> {
+		log_debug!(
+			WithContext::from(&self.logger, Some(*counterparty_node_id), None, None),
+			"'send_padding_message' got called for node {}",
+			log_pubkey!(counterparty_node_id)
+		);
+		match self.send_padding_message_internal(counterparty_node_id) {
+			Ok(_) => Ok(()),
+			Err(_) => Err(std::io::Error::new(
+				std::io::ErrorKind::Other,
+				format!(
+					"Can't find a peer matching the passed counterparty node_id {}",
+					counterparty_node_id
+				),
+			)),
+		}
 	}
 
 	fn send_padding_message_internal(
@@ -8558,6 +8571,11 @@ where
 		})?;
 		let mut peer_state_lock = peer_state_mutex.lock().unwrap();
 		let peer_state = &mut *peer_state_lock;
+		log_debug!(
+			WithContext::from(&self.logger, Some(*counterparty_node_id), None, None),
+			"Pushing 'SendPaddingMessage' event to 'pending_msg_events' to for node {}",
+			log_pubkey!(counterparty_node_id)
+		);
 		peer_state.pending_msg_events.push(events::MessageSendEvent::SendPaddingMessage {
 			node_id: *counterparty_node_id,
 			msg: PaddingMessage { padding: [0; LN_CONST_PADDING_LEN] },
