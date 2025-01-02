@@ -1595,7 +1595,6 @@ where
 	pub fn read_event(
 		&self, peer_descriptor: &mut Descriptor, data: &[u8],
 	) -> Result<bool, PeerHandleError> {
-		// println!("Data to read: {:?}", data);
 		match self.do_read_event(peer_descriptor, data) {
 			Ok(res) => Ok(res),
 			Err(e) => {
@@ -1818,14 +1817,6 @@ where
 							},
 							NextNoiseStep::NoiseComplete => {
 								if peer.pending_read_is_header {
-									// println!(
-									// 	"[Header] Length of pending_read_buffer before decrypting: {}",
-									// 	peer.pending_read_buffer.len()
-									// );
-									// println!(
-									// 	"[Header] pending_read_buffer before decrypting: {:?}",
-									// 	peer.pending_read_buffer
-									// );
 									let msg_len = try_potential_handleerror!(
 										peer,
 										peer.channel_encryptor
@@ -1833,14 +1824,9 @@ where
 									);
 									// set unpadded_msg_len to msg_len read from header
 									peer.unpadded_msg_len = msg_len as usize;
-									// println!(
-									// 	"[Header] Message length read from header: {}",
-									// 	msg_len
-									// );
 									if peer.pending_read_buffer.capacity() > 8192 {
 										peer.pending_read_buffer = Vec::new();
 									}
-									// peer.pending_read_buffer.resize(msg_len as usize + 16, 0);
 									peer.pending_read_buffer.resize(LN_CONST_MSG_LEN - 18, 0);
 									if msg_len < 2 {
 										// Need at least the message type tag
@@ -1848,18 +1834,6 @@ where
 									}
 									peer.pending_read_is_header = false;
 								} else {
-									// println!(
-									// 	"[Message] Length of pending_read_buffer before decrypting: {}",
-									// 	peer.pending_read_buffer.len()
-									// );
-									// println!(
-									// 	"[Message] pending_read_buffer before decrypting: {:?}",
-									// 	peer.pending_read_buffer
-									// );
-									// println!(
-									// 	"[Message] pending_read_buffer_pos before decrypting: {}",
-									// 	peer.pending_read_buffer_pos
-									// );
 									debug_assert!(peer.pending_read_buffer.len() >= 2 + 16);
 									try_potential_handleerror!(
 										peer,
@@ -1868,10 +1842,6 @@ where
 											peer.unpadded_msg_len
 										)
 									);
-									// println!(
-									// 	"[Message] pending_read_buffer_pos after decrypting: {}",
-									// 	peer.pending_read_buffer_pos
-									// );
 
 									let mut reader = io::Cursor::new(
 										&peer.pending_read_buffer[..peer.unpadded_msg_len],
