@@ -167,7 +167,6 @@ impl PeerChannelEncryptor {
 		let mut nonce = [0; 12];
 		nonce[4..].copy_from_slice(&n.to_le_bytes()[..]);
 
-		// println!("[Header encryption] Encrypting message length: {:?}", plaintext);
 		let mut chacha = ChaCha20Poly1305RFC::new(key, &nonce, h);
 		let mut tag = [0; 16];
 		chacha.encrypt(plaintext, &mut res[0..plaintext.len()], &mut tag);
@@ -195,8 +194,6 @@ impl PeerChannelEncryptor {
 			rng.fill_bytes(&mut padding);
 			res.extend(padding);
 		}
-		// println!("[Payload encryption] Encrypted message with length: {}", res.len());
-		// println!("[Payload encryption] Encrypted message: {:?}", res);
 	}
 
 	fn decrypt_in_place_with_ad(
@@ -206,12 +203,8 @@ impl PeerChannelEncryptor {
 		nonce[4..].copy_from_slice(&n.to_le_bytes()[..]);
 
 		let mut chacha = ChaCha20Poly1305RFC::new(key, &nonce, h);
-		// println!("[Payload decryption] Length of message to decrypt: {}", inout.len());
-		// println!("[Payload decryption] Message to decrypt: {:?}", inout);
 		let (inout, tag) = inout.split_at_mut(inout.len() - 16);
-		// println!("[Payload decryption] Original MAC: {:?}", tag);
 		if chacha.check_decrypt_in_place(inout, tag).is_err() {
-			println!("[Payload decryption] Bad MAC => diconnect peer\n");
 			return Err(LightningError {
 				err: "Bad MAC".to_owned(),
 				action: msgs::ErrorAction::DisconnectPeer { msg: None },
@@ -236,7 +229,6 @@ impl PeerChannelEncryptor {
 			)
 			.is_err()
 		{
-			println!("[Header decryption] Bad MAC => diconnect peer\n");
 			return Err(LightningError {
 				err: "Bad MAC".to_owned(),
 				action: msgs::ErrorAction::DisconnectPeer { msg: None },
@@ -560,7 +552,6 @@ impl PeerChannelEncryptor {
 	/// [`Vec::len`], to avoid reallocating for the message MAC, which will be appended to the vec.
 	fn encrypt_message_with_header_0s(&mut self, msgbuf: &mut Vec<u8>) {
 		let msg_len = msgbuf.len() - 16 - 2;
-		// println!("Encrypting message buffer of length: {}", msg_len);
 		if msg_len > LN_MAX_MSG_LEN {
 			panic!("Attempted to encrypt message longer than 65535 bytes!");
 		}
@@ -612,7 +603,6 @@ impl PeerChannelEncryptor {
 		// for the 2-byte message type prefix and its MAC.
 		let mut res = VecWriter(Vec::with_capacity(MSG_BUF_ALLOC_SIZE));
 		res.0.resize(16 + 2, 0);
-		// res.0 after resize: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 		wire::write(message, &mut res).expect("In-memory messages must never fail to serialize");
 
 		self.encrypt_message_with_header_0s(&mut res.0);
@@ -1069,9 +1059,7 @@ mod tests {
 
 		for i in 0..1005 {
 			let msg = [0x68, 0x65, 0x6c, 0x6c, 0x6f];
-			// MessageBuf([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 104, 101, 108, 108, 111])
 			let mut res = outbound_peer.encrypt_buffer(MessageBuf::from_encoded(&msg));
-			// assert_eq!(res.len(), 5 + 2 * 16 + 2);
 			assert_eq!(res.len(), LN_CONST_MSG_LEN);
 
 			let len_header = res[0..2 + 16].to_vec();
